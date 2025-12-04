@@ -11,6 +11,9 @@ PLANE_SPEED = 5
 OBSTACLE_SPEED = 10
 COLUMNS = 5
 OBSTACLE_SIZE = 50
+MIN_BONUS_TIME = 300
+MAX_BONUS_TIME = 500
+BONUS_SPEED = 5
 
 #images 
 PLANE_FILE = "resources/pngwing.com.png"
@@ -21,7 +24,7 @@ HEART_FILE = "resources/heart.png"
 START_FILE = "resources/start_screen_real.png"
 #START_FILE = "resources/start_screen_CZ.png" #EASTER EGG :D
 #START_FILE = "resources/start_screen_RUS.png #EASTER EGG2 :D
-#UPDATE_BONUS = ".png"
+BONUS_FILE = "resources/bonus.png"
 
 
 pygame.init()
@@ -43,18 +46,26 @@ background_img = load_image(BACKGROUND_FILE)
 gameover_img = load_image(GAMEOVER_FILE)
 heart_img = load_image(HEART_FILE)
 start_img = load_image(START_FILE)
-
+bonus_img = load_image(BONUS_FILE)
 
 def generate_new_obstacles(size, texture_surface):
     res = []
     obstacle_num = COLUMNS
-    for _ in range(obstacle_num - 1):
-        obstacle_pos = random.randint(0, obstacle_num - 1)
+    available_positions = list(range(obstacle_num))
+    selected_positions = random.sample(available_positions, obstacle_num - 1)
+    for obstacle_pos in selected_positions:
         x = obstacle_pos * size * 2
         y = -2 * size
         rect = texture_surface.get_rect(topleft=(x, y))
         res.append({"surf": texture_surface, "rect": rect})
     return res
+
+def generate_bonus(texture_surface):
+    small_bonus = pygame.transform.scale(texture_surface, (40, 40))
+    x = random.randint(0, WIDTH - 40)  
+    y = -40 
+    rect = small_bonus.get_rect(topleft=(x, y))
+    return {"surf": small_bonus, "rect": rect, "type": "level_up"}
 
 def pixel_collision(surf1, rect1, surf2, rect2):
     mask1 = pygame.mask.from_surface(surf1)
@@ -68,8 +79,8 @@ class Bullet:
         self.surf = pygame.Surface((5, 15))
         self.surf.fill((255, 255, 0))
         self.rect = self.surf.get_rect(midbottom=pos)
-        self.speed = -10
-
+        self.speed = -15
+        
     def update(self):
         self.rect.y += self.speed
 
@@ -84,9 +95,9 @@ class Plane:
         self.speed = speed
         self.bullets = []
         self.fire_cooldown = 0
-        self.bullet_storage = 5  
+        self.bullet_storage = 100           #<---- TEST PARAMETR
         self.max_bullet_storage = 25 
-        self.lives = 3
+        self.lives = 300                    #<---- TEST PARAMETR
         self.size_factor = 1.0  
 
     def move(self, keys, width, height):
@@ -106,7 +117,7 @@ class Plane:
             pos = (self.rect.centerx, self.rect.top)
             self.bullets.append(Bullet(pos))
             self.bullet_storage -= 1  
-            self.fire_cooldown = 30
+            self.fire_cooldown = 20
 
     def update_bullets(self, obstacles, score_ref):
         for bullet in self.bullets[:]:
@@ -211,9 +222,12 @@ def main():
         player = Plane((200, 500), PLANE_SPEED)
         obstacles = generate_new_obstacles(OBSTACLE_SIZE, obstacle_img)
         add_obstacles_now = 0
+        bonuses = []  
+        add_bonus_now = 0  
+        next_bonus_time = random.randint(MIN_BONUS_TIME, MAX_BONUS_TIME)
         invincible_now = 0
         score = 0
-        level_thresholds = [20, 30, 50, 70, 80,120, 130, 150, 170, 180]
+        level_thresholds = [50, 120,  170, ]          #<---- TEST PARAMETR
         current_level_index = 0
         obs_speed = OBSTACLE_SPEED
 
@@ -243,6 +257,11 @@ def main():
                 score += 5  
                 obs_speed += 0.2  
 
+            add_bonus_now += 1
+            if add_bonus_now >= next_bonus_time:
+                add_bonus_now = 0
+                bonuses.append(generate_bonus(bonus_img))
+                next_bonus_time = random.randint(MIN_BONUS_TIME, MAX_BONUS_TIME)
             
             collided = False
             for i in range(len(obstacles)-1, -1, -1):
@@ -275,11 +294,25 @@ def main():
                 level_up(player)
                 current_level_index += 1
 
-            
+            for i in range(len(bonuses) - 1, -1, -1):
+                bonus = bonuses[i]
+                bonus["rect"].y += BONUS_SPEED
+                if bonus["rect"].top > HEIGHT:
+                    bonuses.pop(i)
+                    continue
+                if pixel_collision(player.surf, player.rect, bonus["surf"], bonus["rect"]):
+                    if bonus["type"] == "level_up":
+                        score += 20  
+                        level_up(player)  
+                    bonuses.pop(i)
+           
             screen.blit(background_img, (0, 0))
             for obs in obstacles:
                 screen.blit(obs["surf"], obs["rect"])
             player.draw_bullets(screen)
+
+            for bonus in bonuses:
+                screen.blit(bonus["surf"], bonus["rect"])
 
             heart_w, heart_h = heart_img.get_size()
             hearts_x = WIDTH - (player.lives * (heart_w + 4)) - 4

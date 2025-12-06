@@ -11,9 +11,19 @@ PLANE_SPEED = 5
 OBSTACLE_SPEED = 10
 COLUMNS = 5
 OBSTACLE_SIZE = 50
+MAX_OBSTACLE_SPEED = 25
 MIN_BONUS_TIME = 300
 MAX_BONUS_TIME = 500
 BONUS_SPEED = 5
+CLOUD_WARNING_TIME = 90
+CLOUD_DURATION = 180
+CLOUD_SPEED = 3
+CLOUD_SPAWN_MIN = 100
+CLOUD_SPAWN_MAX = 300
+MAX_PLANE_SPEED = 10
+BOOST_SPEED_MULTIPLIER = 2.0
+BOOST_MAX = 100
+BOOST_DRAIN_RATE = 1.0
 
 #images 
 PLANE_FILE = "resources/pngwing.com.png"
@@ -73,19 +83,33 @@ def pixel_collision(surf1, rect1, surf2, rect2):
     offset = (rect2.left - rect1.left, rect2.top - rect1.top)
     return mask1.overlap(mask2, offset) is not None
 
+def show_pause_screen(screen_snapshot):
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 150))
+    screen.blit(screen_snapshot, (0, 0))
+    screen.blit(overlay, (0, 0))
 
-class Bullet:
-    def __init__(self, pos):
-        self.surf = pygame.Surface((5, 15))
-        self.surf.fill((255, 255, 0))
-        self.rect = self.surf.get_rect(midbottom=pos)
-        self.speed = -15
-        
-    def update(self):
-        self.rect.y += self.speed
+    font = pygame.font.SysFont(None, 60)
+    pause_text = font.render("PAUSED", True, (255, 255, 100))
+    screen.blit(pause_text, (WIDTH//2 - 100, HEIGHT//2 - 100))
+    
+    font_small = pygame.font.SysFont(None, 36)
+    instruction = font_small.render("press esc to continue", True, (200, 200, 200))
+    screen.blit(instruction, (WIDTH//2 - 150, HEIGHT//2))
+    
+    pygame.display.flip()
+    
+    paused = True
+    while paused:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit(0)
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    paused = False
+        clock.tick(FPS)
 
-    def draw(self, screen):
-        screen.blit(self.surf, self.rect)
 
 class Plane:
     def __init__(self, pos, speed):
@@ -97,18 +121,33 @@ class Plane:
         self.fire_cooldown = 0
         self.bullet_storage = 100           #<---- TEST PARAMETR
         self.max_bullet_storage = 25 
-        self.lives = 300                    #<---- TEST PARAMETR
-        self.size_factor = 1.0  
+        self.lives = 300                  #<---- TEST PARAMETR
+        self.size_factor = 1.0
+        self.speed = speed 
+        self.base_speed = speed
+        self.boost_active = False
+        self.boost_amount = BOOST_MAX
+        self.max_boost = BOOST_MAX
 
     def move(self, keys, width, height):
+        if (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]) and self.boost_amount > 0:
+            self.boost_active = True
+            self.boost_amount = max(0, self.boost_amount - BOOST_DRAIN_RATE)
+        else:
+            self.boost_active = False
+
+        if self.boost_active:
+            current_speed = self.speed * 2
+        else:
+            current_speed = self.speed
         if (keys[pygame.K_w] or keys[pygame.K_UP]) and self.rect.top > 0:
-            self.rect.y -= self.speed
+            self.rect.y -= current_speed
         if (keys[pygame.K_s] or keys[pygame.K_DOWN]) and self.rect.bottom < height:
-            self.rect.y += self.speed
+            self.rect.y += current_speed
         if (keys[pygame.K_a] or keys[pygame.K_LEFT]) and self.rect.left > 0:
-            self.rect.x -= self.speed
+            self.rect.x -= current_speed
         if (keys[pygame.K_d] or keys[pygame.K_RIGHT]) and self.rect.right < width:
-            self.rect.x += self.speed
+            self.rect.x += current_speed
 
     def shoot(self):
         
@@ -119,7 +158,8 @@ class Plane:
             self.bullet_storage -= 1  
             self.fire_cooldown = 20
 
-    def update_bullets(self, obstacles, score_ref):
+    def update_bullets(self, obstacles):
+        points_bullet = 0
         for bullet in self.bullets[:]:
             bullet.update()
             if bullet.rect.bottom < 0:
@@ -130,8 +170,9 @@ class Plane:
                     obstacles.remove(obs)
                     if bullet in self.bullets:
                         self.bullets.remove(bullet)
-                    score_ref[0] += 1  
+                    points_bullet += 10 
                     break
+        return points_bullet
 
     def draw_bullets(self, screen):
         for bullet in self.bullets:
@@ -148,6 +189,131 @@ class Plane:
     def refill_bullets(self, amount):
         self.bullet_storage = min(self.max_bullet_storage, self.bullet_storage + amount)
 
+    def increase_speed(self, amount):
+        self.speed = min(self.speed + amount, MAX_PLANE_SPEED)
+        self.base_speed = self.speed
+
+    def refill_boost(self):
+        self.boost_amount = self.max_boost
+    
+class Bullet:
+    def __init__(self, pos):
+        self.surf = pygame.Surface((5, 15))
+        self.surf.fill((255, 255, 0))
+        self.rect = self.surf.get_rect(midbottom=pos)
+        self.speed = -15                #<---- TEST PARAMETR
+        
+    def update(self):
+        self.rect.y += self.speed
+
+    def draw(self, screen):
+        screen.blit(self.surf, self.rect)
+
+class MeteorCloud:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.active = False
+        self.timer = 0
+        self.warning = False
+        self.meteors = []
+        self.warning_sign = None
+        self.direction = random.choice(["left", "right"])
+        self.generate_warning_sign()
+        
+    def generate_warning_sign(self):
+        font = pygame.font.SysFont(None, 100)
+        self.warning_sign = font.render("!", True, (255, 50, 50))
+        
+    def activate(self):
+        if not self.active:
+            self.active = True
+            self.warning = True
+            self.timer = CLOUD_WARNING_TIME
+            self.direction = random.choice(["left", "right"])
+            self.generate_meteors()
+            
+    def generate_meteors(self):
+        self.meteors = []
+        meteor_count = random.randint(25, 50)
+        meteor_img_small = pygame.transform.scale(obstacle_img, (20, 20))
+        start_y = random.randint(HEIGHT-150, HEIGHT)
+        
+        for _ in range(meteor_count):
+            if self.direction == "right":
+                x = -50 + random.randint(-30, 30)
+            else:
+                x = WIDTH + 50 + random.randint(-30, 30)
+            y = start_y + random.randint(-40, 40)
+            rect = meteor_img_small.get_rect(center=(x, y))
+            speed_x = CLOUD_SPEED if self.direction == "right" else -CLOUD_SPEED
+            speed_y = random.uniform(-0.5, 0.5)
+            self.meteors.append({
+                "surf": meteor_img_small,
+                "rect": rect,
+                "speed": (speed_x, speed_y),
+                "direction": self.direction
+            })
+    
+    def update(self):
+        if not self.active:
+            return
+            
+        self.timer -= 1
+        
+        if self.warning:
+            if self.timer <= 0:
+                self.warning = False
+                self.timer = CLOUD_DURATION
+        else:
+            for meteor in self.meteors:
+                meteor["rect"].x += meteor["speed"][0]
+                meteor["rect"].y += meteor["speed"][1]
+                meteor["rect"].y += random.uniform(-0.3, 0.3)
+
+            if self.timer <= 0:
+                self.active = False
+            else:
+                all_out_of_screen = True
+                for meteor in self.meteors:
+                    if self.direction == "right" and meteor["rect"].left < WIDTH + 100:
+                        all_out_of_screen = False
+                        break
+                    elif self.direction == "left" and meteor["rect"].right > -100:
+                        all_out_of_screen = False
+                        break
+                
+                if all_out_of_screen:
+                    self.active = False
+    
+    def check_collision(self, player_rect, player_surf):
+        if not self.active or self.warning:
+            return False
+            
+        for meteor in self.meteors:
+            if pixel_collision(player_surf, player_rect, meteor["surf"], meteor["rect"]):
+                return True
+        return False
+    
+    def draw(self, screen):
+        if not self.active:
+            return
+            
+        if self.warning:
+            if self.direction == "right":
+                screen.blit(self.warning_sign, (20, HEIGHT - 150))
+            else:
+                screen.blit(self.warning_sign, (WIDTH - 100, HEIGHT - 150))
+                
+            if pygame.time.get_ticks() % 400 < 200:
+                font = pygame.font.SysFont(None, 36)
+                side_text = "LEFT" if self.direction == "right" else "RIGHT"
+                warning_text = font.render(f"CLOUD FROM {side_text}!", True, (255, 255, 255))
+                screen.blit(warning_text, (WIDTH//2 - 120, HEIGHT - 100))
+        else:
+            for meteor in self.meteors:
+                screen.blit(meteor["surf"], meteor["rect"])
+
 def show_start_screen():
     showing = True
     while showing:
@@ -162,7 +328,6 @@ def show_start_screen():
         screen.blit(start_img, start_rect)
         pygame.display.flip()
         clock.tick(FPS)
-
 
 def show_game_over_screen(score):
     showing = True
@@ -182,22 +347,40 @@ def show_game_over_screen(score):
         pygame.display.flip()
         clock.tick(FPS)
 
-
-def level_up(player):
+def level_up(player, screen_snapshot=None):
     font = pygame.font.SysFont(None, 40)
+    screen.fill((0, 0, 0))
+
+    if screen_snapshot is not None:
+        screen.blit(screen_snapshot, (0, 0))
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 150)) 
+        screen.blit(overlay, (0, 0))
+    
+
+    menu_rect = pygame.Rect(WIDTH//2 - 200, HEIGHT//2 - 200, 400, 400)
+    pygame.draw.rect(screen, (30, 30, 60), menu_rect)
+    pygame.draw.rect(screen, (100, 100, 200), menu_rect, 4)
+    title_font = pygame.font.SysFont(None, 50)
+    title = title_font.render("LEVEL UP!", True, (255, 255, 100))
+    screen.blit(title, (WIDTH//2 - 100, HEIGHT//2 - 180))
 
     options = [
         "1) Smaller hitbox",
         "2) +1 life", 
-        "3) +5 bullets to storage"
+        "3) +5 bullets to storage",
+        "4) +1 permanent speed",
+        "5) Refill boost"
     ]
+    
+    for i, option in enumerate(options):
+        txt = font.render(option, True, (255,255,0))
+        screen.blit(txt, (WIDTH//2 - 180, HEIGHT//2 - 100 + i*60))
+    
+    pygame.display.flip()
+    
     choosing = True
     while choosing:
-        screen.fill((0,0,0))
-        for i, option in enumerate(options):
-            txt = font.render(option, True, (255,255,0))
-            screen.blit(txt, (50, 100 + i*60))
-        pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -211,10 +394,15 @@ def level_up(player):
                     player.lives += 1
                     choosing = False
                 elif event.key == pygame.K_3:
-                   
                     player.refill_bullets(5)
                     choosing = False
-
+                elif event.key == pygame.K_4:
+                    player.increase_speed(1)
+                    choosing = False
+                elif event.key == pygame.K_5:
+                    player.refill_boost()
+                    choosing = False
+        clock.tick(FPS)
 
 def main():
     while True:
@@ -227,15 +415,27 @@ def main():
         next_bonus_time = random.randint(MIN_BONUS_TIME, MAX_BONUS_TIME)
         invincible_now = 0
         score = 0
-        level_thresholds = [50, 120,  170, ]          #<---- TEST PARAMETR
+        level_thresholds = [100,  200, 300,400,500,600 ]          #<---- TEST PARAMETR
         current_level_index = 0
-        obs_speed = OBSTACLE_SPEED
+        obs_speed = min(OBSTACLE_SPEED, MAX_OBSTACLE_SPEED)
+        meteor_cloud = MeteorCloud(WIDTH, HEIGHT)
 
         running = True
         frame_counter = 0
+        cloud_spawn_counter = 0
+        next_cloud_spawn = random.randint(CLOUD_SPAWN_MIN, CLOUD_SPAWN_MAX)
+        
         while running:
             clock.tick(FPS)
             frame_counter += 1
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit(0)
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        screen_snapshot = screen.copy()
+                        show_pause_screen(screen_snapshot)
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -249,6 +449,12 @@ def main():
             if player.fire_cooldown > 0:
                 player.fire_cooldown -= 1
 
+            cloud_spawn_counter += 1
+            if cloud_spawn_counter >= next_cloud_spawn and not meteor_cloud.active:
+                meteor_cloud.activate()
+                cloud_spawn_counter = 0
+                next_cloud_spawn = random.randint(CLOUD_SPAWN_MIN, CLOUD_SPAWN_MAX)
+            meteor_cloud.update()
             
             add_obstacles_now += 1
             if add_obstacles_now >= ADD_OBSTACLES_TIMER:
@@ -284,14 +490,23 @@ def main():
                 player.rect.topleft = (200, 500)
                 if player.lives <= 0:
                     running = False
+            
+            if meteor_cloud.check_collision(player.rect, player.surf):
+                if invincible_now >= INVINCIBLE_TIMER:
+                    player.lives -= 1
+                    invincible_now = 0
+                    player.rect.topleft = (200, 500)
+                    if player.lives <= 0:
+                        running = False
 
             if invincible_now < INVINCIBLE_TIMER:
                 invincible_now += 1
 
-            player.update_bullets(obstacles, [score])
+            score += player.update_bullets(obstacles)
            
             if current_level_index < len(level_thresholds) and score >= level_thresholds[current_level_index]:
-                level_up(player)
+                screen_snapshot = screen.copy()
+                level_up(player,screen_snapshot)
                 current_level_index += 1
 
             for i in range(len(bonuses) - 1, -1, -1):
@@ -302,13 +517,17 @@ def main():
                     continue
                 if pixel_collision(player.surf, player.rect, bonus["surf"], bonus["rect"]):
                     if bonus["type"] == "level_up":
-                        score += 20  
-                        level_up(player)  
+                        score += 20
+                        screen_snapshot = screen.copy()
+                        level_up(player,screen_snapshot)  
                     bonuses.pop(i)
            
             screen.blit(background_img, (0, 0))
             for obs in obstacles:
                 screen.blit(obs["surf"], obs["rect"])
+            
+            meteor_cloud.draw(screen)
+
             player.draw_bullets(screen)
 
             for bonus in bonuses:
@@ -319,7 +538,30 @@ def main():
             hearts_y = 4
             for i in range(max(0, player.lives)):
                 screen.blit(heart_img, (hearts_x + i * (heart_w + 4), hearts_y))
+            boost_bar_width = 200
+            boost_bar_height = 20
+            boost_bar_x = 10
+            boost_bar_y = HEIGHT - 40
+            
+            pygame.draw.rect(screen, (50, 50, 50), 
+                            (boost_bar_x, boost_bar_y, boost_bar_width, boost_bar_height))
+            
+            boost_fill_width = (player.boost_amount / player.max_boost) * boost_bar_width
+            boost_color = (255, 100, 100) if player.boost_active else (0, 150, 255)
+            pygame.draw.rect(screen, boost_color, 
+                            (boost_bar_x, boost_bar_y, boost_fill_width, boost_bar_height))
 
+            pygame.draw.rect(screen, (255, 255, 255), 
+                            (boost_bar_x, boost_bar_y, boost_bar_width, boost_bar_height), 2)
+            
+            boost_font = pygame.font.SysFont(None, 24)
+            boost_text = boost_font.render("BOOST (SHIFT)", True, (255, 255, 255))
+            screen.blit(boost_text, (boost_bar_x + boost_bar_width + 10, boost_bar_y))
+
+            speed_font = pygame.font.SysFont(None, 30)
+            speed_text = speed_font.render(f"Speed: {player.speed}", True, (255, 255, 255))
+            screen.blit(speed_text, (WIDTH - 150, 40))
+            
 
             if invincible_now % 10 < 5:
                 screen.blit(player.surf, player.rect)
@@ -328,8 +570,8 @@ def main():
             score_text = font.render(f"Score: {score}", True, (255,255,255))
             screen.blit(score_text, (10, 10))
 
-            bullets_text = font.render(f"Bullets: {player.bullet_storage}/{player.max_bullet_storage}", True, (255,255,255))
-            screen.blit(bullets_text, (10, 50))
+            bullets_text = speed_font.render(f"Bullets: {player.bullet_storage}/{player.max_bullet_storage}", True, (255,255,255))
+            screen.blit(bullets_text, (WIDTH - 150, 70))
 
             pygame.display.flip()
 

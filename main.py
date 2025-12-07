@@ -3,37 +3,36 @@ import random
 import sys
 
 #game parametrs
-WIDTH, HEIGHT = 500, 980
+WIDTH, HEIGHT = 1000, 980
 FPS = 60
-ADD_OBSTACLES_TIMER = 80
-INVINCIBLE_TIMER = 120
+ADD_OBSTACLES_TIMER = 150
+INVINCIBLE_TIMER = 100
 PLANE_SPEED = 5
-OBSTACLE_SPEED = 10
-COLUMNS = 5
+OBSTACLE_SPEED = 7
+COLUMNS = 10
 OBSTACLE_SIZE = 50
 MAX_OBSTACLE_SPEED = 25
 MIN_BONUS_TIME = 300
 MAX_BONUS_TIME = 500
 BONUS_SPEED = 5
 CLOUD_WARNING_TIME = 90
-CLOUD_DURATION = 180
+CLOUD_DURATION = 360
 CLOUD_SPEED = 3
 CLOUD_SPAWN_MIN = 100
 CLOUD_SPAWN_MAX = 300
 MAX_PLANE_SPEED = 10
 BOOST_SPEED_MULTIPLIER = 2.0
-BOOST_MAX = 100
+BOOST_MAX = 500
 BOOST_DRAIN_RATE = 1.0
 
 #images 
 PLANE_FILE = "resources/pngwing.com.png"
 OBSTACLE_FILE = "resources/pngegg.png"
-BACKGROUND_FILE = "resources/space.jpg"
-GAMEOVER_FILE = "resources/game_over.jpg"
+BACKGROUND_FILE = "resources/space2.jpg"
+#BACKGROUND_FILE = "resources/start_screen_CZ.png" #EASTER EGG :D
+#BACKGROUND_FILE = "resources/start_screen_RUS.png" #EASTER EGG 2 :D
+GAMEOVER_FILE = "resources/game_over.png"
 HEART_FILE = "resources/heart.png"
-START_FILE = "resources/start_screen_real.png"
-#START_FILE = "resources/start_screen_CZ.png" #EASTER EGG :D
-#START_FILE = "resources/start_screen_RUS.png #EASTER EGG2 :D
 BONUS_FILE = "resources/bonus.png"
 
 
@@ -53,16 +52,16 @@ def load_image(path):
 plane_img = load_image(PLANE_FILE)
 obstacle_img = load_image(OBSTACLE_FILE)
 background_img = load_image(BACKGROUND_FILE)
+background_img = pygame.transform.scale(background_img, (WIDTH, HEIGHT))
 gameover_img = load_image(GAMEOVER_FILE)
 heart_img = load_image(HEART_FILE)
-start_img = load_image(START_FILE)
 bonus_img = load_image(BONUS_FILE)
 
 def generate_new_obstacles(size, texture_surface):
     res = []
     obstacle_num = COLUMNS
     available_positions = list(range(obstacle_num))
-    selected_positions = random.sample(available_positions, obstacle_num - 1)
+    selected_positions = random.sample(available_positions, obstacle_num - 2)
     for obstacle_pos in selected_positions:
         x = obstacle_pos * size * 2
         y = -2 * size
@@ -121,7 +120,7 @@ class Plane:
         self.fire_cooldown = 0
         self.bullet_storage = 100           #<---- TEST PARAMETR
         self.max_bullet_storage = 25 
-        self.lives = 300                  #<---- TEST PARAMETR
+        self.lives = 3                 #<---- TEST PARAMETR
         self.size_factor = 1.0
         self.speed = speed 
         self.base_speed = speed
@@ -237,7 +236,7 @@ class MeteorCloud:
         self.meteors = []
         meteor_count = random.randint(25, 50)
         meteor_img_small = pygame.transform.scale(obstacle_img, (20, 20))
-        start_y = random.randint(HEIGHT-150, HEIGHT)
+        start_y = random.randint(HEIGHT-100, HEIGHT+50)
         
         for _ in range(meteor_count):
             if self.direction == "right":
@@ -315,17 +314,47 @@ class MeteorCloud:
                 screen.blit(meteor["surf"], meteor["rect"])
 
 def show_start_screen():
+    button_width, button_height = 300, 80 
+    button_x = WIDTH // 2 - button_width // 2
+    button_y = HEIGHT // 2 + 350
+    button_color = (50, 150, 255)
+    button_hover_color = (80, 180, 255)
+    text_color = (255, 255, 255)
+    title_font = pygame.font.SysFont(None, 80)
+    button_font = pygame.font.SysFont(None, 50)
+    plane_on_menu = plane_img
+    plane_rect = plane_on_menu.get_rect(center=(WIDTH//2, HEIGHT//2))
+
     showing = True
     while showing:
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_clicked = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit(0)
             if event.type == pygame.KEYDOWN:
-                showing = False
-        screen.fill((0,0,0))
-        start_rect = start_img.get_rect(center=(WIDTH//2, HEIGHT//2))
-        screen.blit(start_img, start_rect)
+                if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                    showing = False
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    mouse_clicked = True
+        button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+        is_hovering = button_rect.collidepoint(mouse_pos)
+        screen.blit(background_img, (0, 0))
+        title = title_font.render("SPACE JET", True, (255, 255, 100))
+        screen.blit(title, (WIDTH//2 - title.get_width()//2, 200))
+        screen.blit(plane_on_menu, plane_rect)
+        current_color = button_hover_color if is_hovering else button_color
+        pygame.draw.rect(screen, current_color, button_rect, border_radius=15)
+        pygame.draw.rect(screen, (255, 255, 255), button_rect, 3, border_radius=15)
+        button_text = button_font.render("START GAME", True, text_color)
+        screen.blit(button_text, 
+                   (button_x + button_width//2 - button_text.get_width()//2,
+                    button_y + button_height//2 - button_text.get_height()//2))
+        if is_hovering and mouse_clicked:
+            showing = False
+        
         pygame.display.flip()
         clock.tick(FPS)
 
@@ -341,9 +370,9 @@ def show_game_over_screen(score):
             if event.type == pygame.KEYDOWN:
                 showing = False
         screen.blit(background_img, (0,0))
-        go_rect = gameover_img.get_rect(center=(WIDTH//2, HEIGHT//2 + 150))
+        go_rect = gameover_img.get_rect(center=(WIDTH//2, HEIGHT//2 ))
         screen.blit(gameover_img, go_rect)
-        screen.blit(text_surf, text_surf.get_rect(center=(WIDTH//2, HEIGHT//2 - 50)))
+        screen.blit(text_surf, text_surf.get_rect(center=(WIDTH//2, HEIGHT//2 - 150)))
         pygame.display.flip()
         clock.tick(FPS)
 
@@ -407,7 +436,7 @@ def level_up(player, screen_snapshot=None):
 def main():
     while True:
         show_start_screen()
-        player = Plane((200, 500), PLANE_SPEED)
+        player = Plane((WIDTH//2, HEIGHT//2), PLANE_SPEED)
         obstacles = generate_new_obstacles(OBSTACLE_SIZE, obstacle_img)
         add_obstacles_now = 0
         bonuses = []  
@@ -487,7 +516,7 @@ def main():
             if collided:
                 player.lives -= 1
                 invincible_now = 0
-                player.rect.topleft = (200, 500)
+                player.rect.topleft = (WIDTH//2, HEIGHT//2)
                 if player.lives <= 0:
                     running = False
             
@@ -495,7 +524,7 @@ def main():
                 if invincible_now >= INVINCIBLE_TIMER:
                     player.lives -= 1
                     invincible_now = 0
-                    player.rect.topleft = (200, 500)
+                    player.rect.topleft = (WIDTH//2, HEIGHT//2)
                     if player.lives <= 0:
                         running = False
 

@@ -16,7 +16,7 @@ MIN_BONUS_TIME = 300
 MAX_BONUS_TIME = 500
 BONUS_SPEED = 5
 CLOUD_WARNING_TIME = 90
-CLOUD_DURATION = 360
+CLOUD_DURATION = 1000
 CLOUD_SPEED = 3
 CLOUD_SPAWN_MIN = 100
 CLOUD_SPAWN_MAX = 300
@@ -109,7 +109,6 @@ def show_pause_screen(screen_snapshot):
                     paused = False
         clock.tick(FPS)
 
-
 class Plane:
     def __init__(self, pos, speed):
         self.original_surf = plane_img 
@@ -120,13 +119,14 @@ class Plane:
         self.fire_cooldown = 0
         self.bullet_storage = 100           #<---- TEST PARAMETR
         self.max_bullet_storage = 25 
-        self.lives = 3                 #<---- TEST PARAMETR
+        self.lives = 1                    #<---- TEST PARAMETR
         self.size_factor = 1.0
         self.speed = speed 
         self.base_speed = speed
         self.boost_active = False
         self.boost_amount = BOOST_MAX
         self.max_boost = BOOST_MAX
+        self.upgrade_count = 0
 
     def move(self, keys, width, height):
         if (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]) and self.boost_amount > 0:
@@ -159,6 +159,7 @@ class Plane:
 
     def update_bullets(self, obstacles):
         points_bullet = 0
+        destroyed_count = 0 
         for bullet in self.bullets[:]:
             bullet.update()
             if bullet.rect.bottom < 0:
@@ -169,9 +170,10 @@ class Plane:
                     obstacles.remove(obs)
                     if bullet in self.bullets:
                         self.bullets.remove(bullet)
-                    points_bullet += 10 
+                    points_bullet += 10
+                    destroyed_count += 1 
                     break
-        return points_bullet
+        return points_bullet, destroyed_count
 
     def draw_bullets(self, screen):
         for bullet in self.bullets:
@@ -268,7 +270,7 @@ class MeteorCloud:
             for meteor in self.meteors:
                 meteor["rect"].x += meteor["speed"][0]
                 meteor["rect"].y += meteor["speed"][1]
-                meteor["rect"].y += random.uniform(-0.3, 0.3)
+                meteor["rect"].y += random.uniform(-0.3, 1.3)
 
             if self.timer <= 0:
                 self.active = False
@@ -358,21 +360,45 @@ def show_start_screen():
         pygame.display.flip()
         clock.tick(FPS)
 
-def show_game_over_screen(score):
+def show_game_over_screen(score,meteors_destroyed, game_duration, player):
     showing = True
     font = pygame.font.SysFont(None, 60)
+    stat_font = pygame.font.SysFont(None, 40)
     text_surf = font.render(f"Score: {score}", True, (255,255,255))
+    wait_time = 2500
+    start_time = pygame.time.get_ticks()
+    continue_play = False
+    actual_level = player.upgrade_count
+
     while showing:
+        current_time = pygame.time.get_ticks()
+        elapsed = current_time - start_time
+        if elapsed >= wait_time:
+            continue_play = True
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit(0)
             if event.type == pygame.KEYDOWN:
-                showing = False
+                if continue_play:
+                    showing = False
         screen.blit(background_img, (0,0))
-        go_rect = gameover_img.get_rect(center=(WIDTH//2, HEIGHT//2 ))
+        go_rect = gameover_img.get_rect(center=(WIDTH//2, HEIGHT//2 -250  ))
         screen.blit(gameover_img, go_rect)
-        screen.blit(text_surf, text_surf.get_rect(center=(WIDTH//2, HEIGHT//2 - 150)))
+        screen.blit(text_surf, text_surf.get_rect(center=(WIDTH//2, HEIGHT//2 + 130)))
+
+        stat1_text = stat_font.render(f"Meteors destroyed: {meteors_destroyed}", True, (255,255,255))
+        screen.blit(stat1_text, (WIDTH//2 - stat1_text.get_width()//2, HEIGHT//2 + 170))
+        
+        stat2_text = stat_font.render(f"Game time: {game_duration} seconds", True, (255,255,255))
+        screen.blit(stat2_text, (WIDTH//2 - stat2_text.get_width()//2, HEIGHT//2 + 210))
+
+        stat3_text = stat_font.render(f"Level: {actual_level}", True, (255,255,255))
+        screen.blit(stat3_text, (WIDTH//2 - stat3_text.get_width()//2, HEIGHT//2 + 250))
+
+        hint = font.render("Press any key to restart", True, (255, 255, 55))
+        screen.blit(hint, (WIDTH//2 - hint.get_width()//2, HEIGHT - 100))
+
         pygame.display.flip()
         clock.tick(FPS)
 
@@ -416,20 +442,25 @@ def level_up(player, screen_snapshot=None):
                 sys.exit(0)
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_1:
-                    player.size_factor *= 0.8
+                    player.size_factor *= 0.9
                     player.update_size()
+                    player.upgrade_count += 1
                     choosing = False
                 elif event.key == pygame.K_2:
                     player.lives += 1
+                    player.upgrade_count += 1
                     choosing = False
                 elif event.key == pygame.K_3:
                     player.refill_bullets(5)
+                    player.upgrade_count += 1
                     choosing = False
                 elif event.key == pygame.K_4:
                     player.increase_speed(1)
+                    player.upgrade_count += 1
                     choosing = False
                 elif event.key == pygame.K_5:
                     player.refill_boost()
+                    player.upgrade_count += 1
                     choosing = False
         clock.tick(FPS)
 
@@ -448,6 +479,8 @@ def main():
         current_level_index = 0
         obs_speed = min(OBSTACLE_SPEED, MAX_OBSTACLE_SPEED)
         meteor_cloud = MeteorCloud(WIDTH, HEIGHT)
+        game_start_time = pygame.time.get_ticks()
+        meteors_destroyed = 0
 
         running = True
         frame_counter = 0
@@ -531,7 +564,9 @@ def main():
             if invincible_now < INVINCIBLE_TIMER:
                 invincible_now += 1
 
-            score += player.update_bullets(obstacles)
+            points_from_bullets, destroyed_count = player.update_bullets(obstacles)
+            score += points_from_bullets
+            meteors_destroyed += destroyed_count
            
             if current_level_index < len(level_thresholds) and score >= level_thresholds[current_level_index]:
                 screen_snapshot = screen.copy()
@@ -603,8 +638,8 @@ def main():
             screen.blit(bullets_text, (WIDTH - 150, 70))
 
             pygame.display.flip()
-
-        show_game_over_screen(score)
+        game_duration = (pygame.time.get_ticks() - game_start_time) // 1000
+        show_game_over_screen(score,meteors_destroyed, game_duration, player)
 
 if __name__ == "__main__":
     main()

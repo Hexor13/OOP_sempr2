@@ -5,9 +5,35 @@ import random
 import sys
 
 from parametrs import * 
-from resources_f import screen, clock, FPS, background_img, heart_img, obstacle_img, bonus_img 
+from resources_f import screen, clock, FPS, background_img, heart_img, obstacle_img, bonus_img,plane_img,gameover_img
 from classes import Plane, MeteorCloud 
 from functions import show_start_screen, show_pause_screen, show_game_over_screen, level_up, generate_new_obstacles, generate_bonus, pixel_collision
+
+#test only for OOP- sempr(podminka zakladni testy) 
+#images test 
+assert plane_img is not None
+assert obstacle_img is not None
+assert background_img is not None
+assert heart_img is not None
+assert bonus_img is not None
+assert gameover_img is not None
+print("images - ok")
+#start pameters test
+test_plane = Plane((100, 100), PLANE_SPEED)
+assert test_plane.lives == 3, "max 3 start hearts, don't cheat -_- "
+assert test_plane.speed == PLANE_SPEED, "start speed = 5, don't cheat -_- "
+assert test_plane.bullet_storage == 10, "start number of bullets = 10 don't cheat -_-"
+print("plane - ok")
+#collision test
+rect1 = pygame.Rect(0, 0, 50, 50)
+rect2 = pygame.Rect(100, 100, 50, 50)
+try:
+    pixel_collision(test_plane.surf, rect1, obstacle_img, rect2)
+    print("collision - ok")
+except:
+    assert False
+del test_plane
+print("start...")
 
 def main():
     while True:

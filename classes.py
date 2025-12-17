@@ -8,13 +8,14 @@ from functions import pixel_collision
 
 class Plane:
     def __init__(self, pos, speed):
+        #parametrs
         self.original_surf = plane_img 
         self.surf = self.original_surf
         self.rect = self.surf.get_rect(topleft=pos)
         self.speed = speed
         self.bullets = []
         self.fire_cooldown = 0
-        self.bullet_storage = 100           #<---- TEST PARAMETR
+        self.bullet_storage = 10           #<---- TEST PARAMETR(= most changeable)
         self.max_bullet_storage = 25 
         self.lives = 3                    #<---- TEST PARAMETR
         self.size_factor = 1.0
@@ -25,6 +26,7 @@ class Plane:
         self.max_boost = BOOST_MAX
         self.upgrade_count = 0
 
+    #keyboard buttons movement
     def move(self, keys, width, height):
         if (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]) and self.boost_amount > 0:
             self.boost_active = True
@@ -48,12 +50,11 @@ class Plane:
     def shoot(self):
         
         if self.fire_cooldown == 0 and self.bullet_storage > 0 and len(self.bullets) < self.max_bullet_storage:
-           
             pos = (self.rect.centerx, self.rect.top)
             self.bullets.append(Bullet(pos))
             self.bullet_storage -= 1  
             self.fire_cooldown = 20
-
+    #update bullets and check coliision with meteors(obstacles)+count them 
     def update_bullets(self, obstacles):
         points_bullet = 0
         destroyed_count = 0 
@@ -71,11 +72,11 @@ class Plane:
                     destroyed_count += 1 
                     break
         return points_bullet, destroyed_count
-
+    
     def draw_bullets(self, screen):
         for bullet in self.bullets:
             bullet.draw(screen)
-    
+    # for size level up
     def update_size(self):
         new_width = int(self.original_surf.get_width() * self.size_factor)
         new_height = int(self.original_surf.get_height() * self.size_factor)
@@ -83,23 +84,23 @@ class Plane:
         
         center = self.rect.center
         self.rect = self.surf.get_rect(center=center)
-    
+    # for level up
     def refill_bullets(self, amount):
         self.bullet_storage = min(self.max_bullet_storage, self.bullet_storage + amount)
-
+    # for level up
     def increase_speed(self, amount):
         self.speed = min(self.speed + amount, MAX_PLANE_SPEED)
         self.base_speed = self.speed
-
+    # for level up
     def refill_boost(self):
         self.boost_amount = self.max_boost
-    
+
 class Bullet:
     def __init__(self, pos):
         self.surf = pygame.Surface((5, 15))
         self.surf.fill((255, 255, 0))
         self.rect = self.surf.get_rect(midbottom=pos)
-        self.speed = -15                #<---- TEST PARAMETR
+        self.speed = -15
         
     def update(self):
         self.rect.y += self.speed
@@ -130,7 +131,7 @@ class MeteorCloud:
             self.timer = CLOUD_WARNING_TIME
             self.direction = random.choice(["left", "right"])
             self.generate_meteors()
-            
+    #generation random number of meteors(and ranodm side)        
     def generate_meteors(self):
         self.meteors = []
         meteor_count = random.randint(25, 50)
@@ -183,7 +184,7 @@ class MeteorCloud:
                 
                 if all_out_of_screen:
                     self.active = False
-    
+    #collision only for cloud
     def check_collision(self, player_rect, player_surf):
         if not self.active or self.warning:
             return False
@@ -192,7 +193,7 @@ class MeteorCloud:
             if pixel_collision(player_surf, player_rect, meteor["surf"], meteor["rect"]):
                 return True
         return False
-    
+    #draw warning sign
     def draw(self, screen):
         if not self.active:
             return

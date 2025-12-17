@@ -4,12 +4,13 @@ import pygame
 import sys
 from parametrs import *
 
+#parametrs for game window
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("SpaceJet Game (Python)")
 clock = pygame.time.Clock()
 
-
+#load and save defin for images from recourses
 def load_image(path):
     try:
         return pygame.image.load(path).convert_alpha()

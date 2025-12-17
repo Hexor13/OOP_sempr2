@@ -13,7 +13,7 @@ def generate_new_obstacles(size, texture_surface):
     res = []
     obstacle_num = COLUMNS
     available_positions = list(range(obstacle_num))
-    selected_positions = random.sample(available_positions, obstacle_num - 2)
+    selected_positions = random.sample(available_positions, obstacle_num - 2) # -2 to differnet way to avoid obstacle
     for obstacle_pos in selected_positions:
         x = obstacle_pos * size * 2
         y = -2 * size
@@ -27,7 +27,7 @@ def generate_bonus(texture_surface):
     y = -40 
     rect = small_bonus.get_rect(topleft=(x, y))
     return {"surf": small_bonus, "rect": rect, "type": "level_up"}
-
+#calculate collisions between 2 rectangles(hitboxes)
 def pixel_collision(surf1, rect1, surf2, rect2):
     mask1 = pygame.mask.from_surface(surf1)
     mask2 = pygame.mask.from_surface(surf2)
@@ -36,13 +36,13 @@ def pixel_collision(surf1, rect1, surf2, rect2):
 
 #screens
 
-def show_pause_screen(screen_snapshot):
+def show_pause_screen(screenshot):
     overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
     overlay.fill((0, 0, 0, 150))
-    screen.blit(screen_snapshot, (0, 0))
+    screen.blit(screenshot, (0, 0)) 
     screen.blit(overlay, (0, 0))
 
-    font = pygame.font.SysFont(None, 60)
+    font = pygame.font.SysFont(None, 60) 
     pause_text = font.render("PAUSED", True, (255, 255, 100))
     screen.blit(pause_text, (WIDTH//2 - 100, HEIGHT//2 - 100))
     
@@ -74,7 +74,7 @@ def show_start_screen():
     button_font = pygame.font.SysFont(None, 50)
     plane_on_menu = plane_img
     plane_rect = plane_on_menu.get_rect(center=(WIDTH//2, HEIGHT//2))
-
+    #draw plane, name of game, play button 
     showing = True
     while showing:
         mouse_pos = pygame.mouse.get_pos()
@@ -117,7 +117,7 @@ def show_game_over_screen(score,meteors_destroyed, game_duration, player):
     start_time = pygame.time.get_ticks()
     continue_play = False
     actual_level = player.upgrade_count
-
+    #draw stats and keys to restart 
     while showing:
         current_time = pygame.time.get_ticks()
         elapsed = current_time - start_time
@@ -152,24 +152,23 @@ def show_game_over_screen(score,meteors_destroyed, game_duration, player):
 
 #level
 
-def level_up(player, screen_snapshot=None):
+def level_up(player, screenshot=None):
     font = pygame.font.SysFont(None, 40)
     screen.fill((0, 0, 0))
 
-    if screen_snapshot is not None:
-        screen.blit(screen_snapshot, (0, 0))
+    if screenshot is not None:
+        screen.blit(screenshot, (0, 0))
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 150)) 
         screen.blit(overlay, (0, 0))
-    
-
+    #draw menu for updates
     menu_rect = pygame.Rect(WIDTH//2 - 200, HEIGHT//2 - 200, 400, 400)
     pygame.draw.rect(screen, (30, 30, 60), menu_rect)
     pygame.draw.rect(screen, (100, 100, 200), menu_rect, 4)
     title_font = pygame.font.SysFont(None, 50)
     title = title_font.render("LEVEL UP!", True, (255, 255, 100))
     screen.blit(title, (WIDTH//2 - 100, HEIGHT//2 - 180))
-
+    #updates
     options = [
         "1) Smaller hitbox",
         "2) +1 life", 
@@ -177,13 +176,13 @@ def level_up(player, screen_snapshot=None):
         "4) +1 permanent speed",
         "5) Refill boost"
     ]
-    
+    #cyklus to draw updates 
     for i, option in enumerate(options):
         txt = font.render(option, True, (255,255,0))
         screen.blit(txt, (WIDTH//2 - 180, HEIGHT//2 - 100 + i*60))
     
     pygame.display.flip()
-    
+    # choose update with buttons 1;2;3;4;5
     choosing = True
     while choosing:
         for event in pygame.event.get():
